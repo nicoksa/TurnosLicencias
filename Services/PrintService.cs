@@ -1,16 +1,17 @@
-using System.Diagnostics;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
+using System.Diagnostics;
+using TurnosLicencias.Helpers;
 using TurnosLicencias.Models;
 
 namespace TurnosLicencias.Services
 {
-    /// <summary>
+ 
     /// Genera el listado del día como un archivo PDF real (una página para la
     /// Oficina 1 y otra para la Oficina 2) y lo abre con el lector de PDF
     /// predeterminado de Windows. Desde ahí el usuario imprime con el botón
     /// de impresión de su propio lector (Edge, Adobe Reader, etc.).
-    /// </summary>
+
     public class PrintService
     {
         private readonly DateTime _fecha;
@@ -44,13 +45,13 @@ namespace TurnosLicencias.Services
         }
 
         // ============================================================
-        //  LISTADO POR OFICINA (SIN CAMBIOS respecto del original)
+        //  LISTADO POR OFICINA 
         // ============================================================
 
-        /// <summary>
+
         /// Genera el PDF del listado del día y lo abre con la aplicación
         /// predeterminada de Windows para archivos PDF.
-        /// </summary>
+
         public void GenerarYAbrirPdf()
         {
             using var documento = new PdfDocument();
@@ -111,21 +112,34 @@ namespace TurnosLicencias.Services
             DibujarTextoCentradoVerticalmente(gfx, "DNI", FontEncabezadoTabla, XBrushes.Black, xDni + 8, y);
             y += AltoFila;
 
-            if (turnos.Count == 0)
-            {
-                DibujarFilaConLineas(gfx, lapiz, xHora, xNombre, xDni, y, anchoTotal);
-                DibujarTextoCentradoVerticalmente(gfx, "(sin turnos reservados para este día)", FontVacio, XBrushes.Gray, xHora + 8, y);
-                y += AltoFila;
-                return;
-            }
+ 
+            var limite = new TimeSpan(13, 0, 0);
+            var horarios = HorarioHelper.GenerarHorarios()
+                .Where(h => h <= limite)
+                .ToList();
 
             foreach (var t in turnos)
             {
+                if (!horarios.Contains(t.Hora))
+                    horarios.Add(t.Hora);
+            }
+            horarios = horarios.OrderBy(h => h).ToList();
+
+            var turnosPorHora = turnos.ToDictionary(t => t.Hora);
+
+            foreach (var hora in horarios)
+            {
                 DibujarFilaConLineas(gfx, lapiz, xHora, xNombre, xDni, y, anchoTotal);
 
-                DibujarTextoCentradoVerticalmente(gfx, t.Hora.ToString(@"hh\:mm"), FontTexto, XBrushes.Black, xHora + 8, y);
-                DibujarTextoCentradoVerticalmente(gfx, t.NombreApellido, FontTexto, XBrushes.Black, xNombre + 8, y);
-                DibujarTextoCentradoVerticalmente(gfx, t.Dni, FontTexto, XBrushes.Black, xDni + 8, y);
+                // La hora se imprime siempre, haya turno o no
+                DibujarTextoCentradoVerticalmente(gfx, hora.ToString(@"hh\:mm"), FontTexto, XBrushes.Black, xHora + 8, y);
+
+                // Nombre y DNI solo si el horario está ocupado; si no, quedan en blanco
+                if (turnosPorHora.TryGetValue(hora, out var t))
+                {
+                    DibujarTextoCentradoVerticalmente(gfx, t.NombreApellido, FontTexto, XBrushes.Black, xNombre + 8, y);
+                    DibujarTextoCentradoVerticalmente(gfx, t.Dni, FontTexto, XBrushes.Black, xDni + 8, y);
+                }
 
                 y += AltoFila;
             }
@@ -145,7 +159,7 @@ namespace TurnosLicencias.Services
         }
 
         // ============================================================
-        //  LISTADO ALFABÉTICO (ÚNICA PARTE MODIFICADA: ahora pagina)
+        //  LISTADO ALFABÉTICO
         // ============================================================
 
         /// <summary>
